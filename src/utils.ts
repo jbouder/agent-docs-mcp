@@ -66,7 +66,7 @@ export function parseGitHubUrl(url: string): string {
 }
 
 /**
- * Build AGENT.md URL from a base URL
+ * Build AGENTS.md URL from a base URL
  */
 export function buildAgentMdUrl(baseUrl: string): string {
   // First normalize the GitHub URL to ensure it has /blob/branch format
@@ -75,29 +75,47 @@ export function buildAgentMdUrl(baseUrl: string): string {
   const normalizedBase = normalizedUrl.endsWith("/")
     ? normalizedUrl.slice(0, -1)
     : normalizedUrl;
-  return `${normalizedBase}/AGENT.md`;
+  return `${normalizedBase}/AGENTS.md`;
 }
 
 /**
- * Fetch AGENT.md content from a base URL
+ * Fetch AGENTS.md content from a base URL
+ */
+async function tryFetchAgentDoc(
+  baseUrl: string
+): Promise<{ content: string; foundAt: string }> {
+  const normalizedUrl = normalizeGitHubUrl(baseUrl);
+  const normalizedBase = normalizedUrl.endsWith("/")
+    ? normalizedUrl.slice(0, -1)
+    : normalizedUrl;
+
+  const agentsMdUrl = `${normalizedBase}/AGENTS.md`;
+  const rawUrl = parseGitHubUrl(agentsMdUrl);
+  const response = await fetch(rawUrl);
+
+  if (!response.ok) {
+    throw new Error(
+      `AGENTS.md not found at ${baseUrl}. Tried: ${agentsMdUrl} (${response.status} ${response.statusText})`
+    );
+  }
+
+  const content = await response.text();
+  return { content, foundAt: agentsMdUrl };
+}
+
+/**
+ * Fetch AGENTS.md content from a base URL
  */
 export async function fetchAgentDoc(baseUrl: string): Promise<string> {
   try {
-    const agentMdUrl = buildAgentMdUrl(baseUrl);
-    const rawUrl = parseGitHubUrl(agentMdUrl);
-    const response = await fetch(rawUrl);
-
-    if (!response.ok) {
-      throw new Error(
-        `Failed to fetch AGENT.md from ${baseUrl}: ${response.status} ${response.statusText}`
-      );
-    }
-
-    const content = await response.text();
+    const { content, foundAt } = await tryFetchAgentDoc(baseUrl);
+    log(`Successfully fetched agent documentation from ${foundAt}`);
     return content;
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    throw new Error(`Error fetching AGENT.md from ${baseUrl}: ${errorMessage}`);
+    throw new Error(
+      `Error fetching AGENTS.md from ${baseUrl}: ${errorMessage}`
+    );
   }
 }
 

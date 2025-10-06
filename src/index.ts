@@ -52,7 +52,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "get_docs",
         description:
-          "Gets all AGENT.md documentation content from configured base URLs",
+          "Gets all AGENTS.md documentation content from configured base URLs",
         inputSchema: {
           type: "object",
           properties: {},
@@ -61,14 +61,14 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "get_doc_by_base_url",
         description:
-          "Gets AGENT.md documentation content from a specific base URL",
+          "Gets AGENTS.md documentation content from a specific base URL",
         inputSchema: {
           type: "object",
           properties: {
             baseUrl: {
               type: "string",
               description:
-                "Base URL to fetch AGENT.md from (e.g., https://github.com/owner/repo/blob/main or https://github.com/owner/repo/blob/main/docs)",
+                "Base URL to fetch AGENTS.md from (e.g., https://github.com/owner/repo/blob/main or https://github.com/owner/repo/blob/main/docs)",
             },
           },
           required: ["baseUrl"],
@@ -113,7 +113,7 @@ server.setRequestHandler(
           let responseText = "";
 
           if (successfulResults.length > 0) {
-            responseText += "# AGENT.md Documentation Content\n\n";
+            responseText += "# AGENTS.md Documentation Content\n\n";
             for (const result of successfulResults) {
               responseText += `## From: ${result.baseUrl}\n\n`;
               responseText += result.content;
@@ -149,7 +149,7 @@ server.setRequestHandler(
             content: [
               {
                 type: "text",
-                text: `# AGENT.md from: ${baseUrl}\n\n${content}`,
+                text: `# AGENTS.md from: ${baseUrl}\n\n${content}`,
               },
             ],
           };
@@ -167,7 +167,7 @@ server.setRequestHandler(
             content: [
               {
                 type: "text",
-                text: `# Configured Base URLs\n\n${urlList}\n\nNote: AGENT.md will be appended to each base URL.`,
+                text: `# Configured Base URLs\n\n${urlList}\n\nNote: AGENTS.md will be appended to each base URL.`,
               },
             ],
           };
