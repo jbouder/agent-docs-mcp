@@ -5,6 +5,8 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
+  ListResourcesRequestSchema,
+  ReadResourceRequestSchema,
   CallToolRequest,
 } from "@modelcontextprotocol/sdk/types.js";
 import { log } from "./utils.js";
@@ -41,6 +43,7 @@ const server = new Server(
   {
     capabilities: {
       tools: {},
+      resources: {},
     },
   }
 );
@@ -50,37 +53,74 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [
       {
-        name: "get_docs",
+        name: "read_agent_docs",
         description:
-          "Gets all AGENTS.md documentation content from configured base URLs",
-        inputSchema: {
-          type: "object",
-          properties: {},
-        },
-      },
-      {
-        name: "get_doc_by_base_url",
-        description:
-          "Gets AGENTS.md documentation content from a specific base URL",
+          "Read agent documentation and coding guidelines from configured repositories. Use this when you need context about how to work with a codebase, understand coding patterns, architecture decisions, or get implementation guidelines. The documentation provides best practices, conventions, and important context for making code changes.",
         inputSchema: {
           type: "object",
           properties: {
-            baseUrl: {
+            repository: {
               type: "string",
               description:
-                "Base URL to fetch AGENTS.md from (e.g., https://github.com/owner/repo/blob/main or https://github.com/owner/repo/blob/main/docs)",
+                "Optional: specific repository URL or name to get docs from. If not provided, returns all configured docs.",
             },
           },
-          required: ["baseUrl"],
         },
       },
       {
-        name: "list_configured_urls",
-        description: "Lists all configured base URLs",
+        name: "search_agent_docs",
+        description:
+          "Search through agent documentation for specific information about coding patterns, architecture, APIs, or implementation details. Use this when you need to find specific guidance before implementing a feature or fixing a bug.",
         inputSchema: {
           type: "object",
-          properties: {},
+          properties: {
+            query: {
+              type: "string",
+              description:
+                "What to search for in the documentation (e.g., 'authentication pattern', 'error handling', 'API endpoints')",
+            },
+          },
+          required: ["query"],
         },
+      },
+    ],
+  };
+});
+
+// Resource handlers - make docs available as resources
+server.setRequestHandler(ListResourcesRequestSchema, async () => {
+  const resources = config.baseUrls.map((url, index) => ({
+    uri: `agents://docs/${index}`,
+    mimeType: "text/markdown",
+    name: `Agent Documentation: ${url}`,
+    description: `Agent documentation and coding guidelines from ${url}`,
+  }));
+
+  return { resources };
+});
+
+server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+  const uri = request.params.uri;
+  const match = uri.match(/^agents:\/\/docs\/(\d+)$/);
+
+  if (!match) {
+    throw new Error(`Unknown resource: ${uri}`);
+  }
+
+  const index = parseInt(match[1]);
+  if (index < 0 || index >= config.baseUrls.length) {
+    throw new Error(`Invalid resource index: ${index}`);
+  }
+
+  const baseUrl = config.baseUrls[index];
+  const content = await fetchAgentDoc(baseUrl);
+
+  return {
+    contents: [
+      {
+        uri,
+        mimeType: "text/markdown",
+        text: content,
       },
     ],
   };
@@ -94,35 +134,71 @@ server.setRequestHandler(
 
     try {
       switch (name) {
-        case "get_docs": {
+        case "read_agent_docs": {
           if (config.baseUrls.length === 0) {
             return {
               content: [
                 {
                   type: "text",
-                  text: "No base URLs configured. Please configure URLs in your MCP client settings.",
+                  text: "No repositories configured. Please add repository URLs to REPO_URLS in your MCP client settings.",
                 },
               ],
             };
           }
 
+          const repository = args?.repository as string | undefined;
+
+          // If specific repository requested, try to find it
+          if (repository) {
+            const matchingUrl = config.baseUrls.find(
+              (url) =>
+                url.includes(repository) ||
+                url.toLowerCase().includes(repository.toLowerCase())
+            );
+
+            if (matchingUrl) {
+              const content = await fetchAgentDoc(matchingUrl);
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: `# Agent Documentation\n\n**Repository:** ${matchingUrl}\n\n${content}`,
+                  },
+                ],
+              };
+            } else {
+              return {
+                content: [
+                  {
+                    type: "text",
+                    text: `Repository "${repository}" not found in configured URLs. Available repositories:\n${config.baseUrls
+                      .map((u, i) => `${i + 1}. ${u}`)
+                      .join("\n")}`,
+                  },
+                ],
+              };
+            }
+          }
+
+          // Otherwise, return all docs
           const results = await fetchAllAgentDocs(config.baseUrls);
           const successfulResults = results.filter((r) => !r.error);
           const errorResults = results.filter((r) => r.error);
 
-          let responseText = "";
+          let responseText = "# Agent Documentation\n\n";
+          responseText +=
+            "This documentation provides coding guidelines, patterns, and context for working with the configured repositories.\n\n";
 
           if (successfulResults.length > 0) {
-            responseText += "# AGENTS.md Documentation Content\n\n";
             for (const result of successfulResults) {
-              responseText += `## From: ${result.baseUrl}\n\n`;
+              responseText += `## 📚 ${result.baseUrl}\n\n`;
               responseText += result.content;
               responseText += "\n\n---\n\n";
             }
           }
 
           if (errorResults.length > 0) {
-            responseText += "\n## Errors:\n";
+            responseText += "\n## ⚠️ Errors:\n";
             for (const result of errorResults) {
               responseText += `- ${result.baseUrl}: ${result.error}\n`;
             }
@@ -132,42 +208,88 @@ server.setRequestHandler(
             content: [
               {
                 type: "text",
-                text: responseText || "No content available.",
+                text: responseText || "No documentation available.",
               },
             ],
           };
         }
 
-        case "get_doc_by_base_url": {
-          const baseUrl = args?.baseUrl as string;
-          if (!baseUrl) {
-            throw new Error("baseUrl parameter is required");
+        case "search_agent_docs": {
+          if (config.baseUrls.length === 0) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: "No repositories configured. Please add repository URLs to REPO_URLS in your MCP client settings.",
+                },
+              ],
+            };
           }
 
-          const content = await fetchAgentDoc(baseUrl);
+          const query = args?.query as string;
+          if (!query) {
+            throw new Error("query parameter is required");
+          }
+
+          const results = await fetchAllAgentDocs(config.baseUrls);
+          const successfulResults = results.filter((r) => !r.error);
+
+          let responseText = `# Search Results for: "${query}"\n\n`;
+          let foundMatches = false;
+
+          for (const result of successfulResults) {
+            const lines = result.content.split("\n");
+            const matches: {
+              lineNum: number;
+              line: string;
+              context: string[];
+            }[] = [];
+
+            // Search for query in content
+            lines.forEach((line, index) => {
+              if (line.toLowerCase().includes(query.toLowerCase())) {
+                const contextStart = Math.max(0, index - 2);
+                const contextEnd = Math.min(lines.length, index + 3);
+                matches.push({
+                  lineNum: index + 1,
+                  line,
+                  context: lines.slice(contextStart, contextEnd),
+                });
+              }
+            });
+
+            if (matches.length > 0) {
+              foundMatches = true;
+              responseText += `## 📍 Found in: ${result.baseUrl}\n\n`;
+              responseText += `**${matches.length} match(es) found**\n\n`;
+
+              matches.forEach((match, idx) => {
+                responseText += `### Match ${idx + 1} (Line ${
+                  match.lineNum
+                })\n\n`;
+                responseText += "```\n";
+                responseText += match.context.join("\n");
+                responseText += "\n```\n\n";
+              });
+
+              responseText += "---\n\n";
+            }
+          }
+
+          if (!foundMatches) {
+            responseText += `No matches found for "${query}" in the configured documentation.\n\n`;
+            responseText += "Try searching for:\n";
+            responseText += "- Different keywords or phrases\n";
+            responseText += "- More general terms\n";
+            responseText +=
+              "- Check the available documentation with read_agent_docs\n";
+          }
+
           return {
             content: [
               {
                 type: "text",
-                text: `# AGENTS.md from: ${baseUrl}\n\n${content}`,
-              },
-            ],
-          };
-        }
-
-        case "list_configured_urls": {
-          const urlList =
-            config.baseUrls.length > 0
-              ? config.baseUrls
-                  .map((url, index) => `${index + 1}. ${url}`)
-                  .join("\n")
-              : "No URLs configured.";
-
-          return {
-            content: [
-              {
-                type: "text",
-                text: `# Configured Base URLs\n\n${urlList}\n\nNote: AGENTS.md will be appended to each base URL.`,
+                text: responseText,
               },
             ],
           };
@@ -196,7 +318,7 @@ async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
   log(
-    `My Docs MCP server running on stdio with ${config.baseUrls.length} configured base URLs`
+    `Agent Docs MCP server running with ${config.baseUrls.length} configured repository(ies)`
   );
 }
 

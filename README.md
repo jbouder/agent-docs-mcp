@@ -1,14 +1,28 @@
 # Agent Docs MCP
 
-MCP Server providing access to AGENTS.md files from GitHub repositories to support your AI code assisted environment.
+MCP Server that provides coding agents with automatic access to AGENTS.md documentation from GitHub repositories. This enables AI assistants to understand your codebase conventions, patterns, and guidelines without manual intervention.
+
+## Why Use This?
+
+When working with AI coding agents, they often need context about:
+
+- Your coding standards and conventions
+- Architecture decisions and patterns
+- API usage and best practices
+- Project-specific guidelines
+
+This MCP server makes that documentation automatically available to agents, so they can:
+
+- **Automatically reference** your coding guidelines when making changes
+- **Search** for specific patterns or implementations
+- **Understand context** before implementing features
+- **Follow conventions** without being explicitly told
 
 ## Getting Started
 
-Add the following to your mcp.json to connect VS Code Copilot to the MCP server. The repository URLs are configured using the `REPO_URLS` environment variable, and the server will automatically look for AGENTS.md files:
+Add the following to your MCP configuration to connect your AI assistant to the documentation:
 
-## Example Configuration
-
-Complete MCP configuration example:
+### Configuration
 
 ```json
 {
@@ -24,52 +38,111 @@ Complete MCP configuration example:
 }
 ```
 
-This configuration will automatically fetch AGENTS.md files from:
+This will automatically make AGENTS.md files available from:
 
 - `https://github.com/jbouder/acolyte/blob/main/AGENTS.md`
 - `https://github.com/MetroStar/comet/blob/main/AGENTS.md`
 
-**Important**: The `REPO_URLS` environment variable expects a JSON array string containing GitHub repository URLs. The server will automatically:
+**Environment Variables:**
 
-- Add `/blob/main` if not specified (you can also specify other branches like `/blob/develop`)
-- Append `/AGENTS.md` to fetch the agent documentation
+- `REPO_URLS`: JSON array of GitHub repository URLs
+  - The server automatically adds `/blob/main` if not specified
+  - You can specify branches: `https://github.com/owner/repo/blob/develop`
+  - You can specify subdirectories: `https://github.com/owner/repo/blob/main/docs`
 
-## Supported File Name
+## How It Works
 
-The server looks for **`AGENTS.md`** (plural) in your repository. Make sure your repository contains this file at the root or at the specified path.
+### Resources (Automatic)
+
+The documentation is exposed as **MCP resources**, which means agents can automatically access it when working on your code. No manual tool calls needed!
+
+### Tools (On-Demand)
+
+| Tool                | When Agents Use It                                                                |
+| ------------------- | --------------------------------------------------------------------------------- |
+| `read_agent_docs`   | To read coding guidelines, patterns, and conventions before implementing features |
+| `search_agent_docs` | To find specific information about APIs, patterns, or implementation details      |
+
+**Agents will automatically use these tools when:**
+
+- Starting work on a new feature
+- Fixing bugs and needing context
+- Implementing APIs or following patterns
+- Understanding architecture decisions
 
 ## Supported URL Formats
 
 The server intelligently handles various GitHub URL formats:
 
 - `https://github.com/owner/repo` → auto-adds `/blob/main/AGENTS.md`
-- `https://github.com/owner/repo/blob/branch` → adds `/AGENT.md`
-- `https://github.com/owner/repo/blob/branch/path` → adds `/AGENT.md`
-- `https://github.com/owner/repo/tree/branch` → converts to blob and adds `/AGENT.md`
-
 - `https://github.com/owner/repo/blob/branch` → adds `/AGENTS.md`
 - `https://github.com/owner/repo/blob/branch/path` → adds `/AGENTS.md`
 - `https://github.com/owner/repo/tree/branch` → converts to blob and adds `/AGENTS.md`
 
 All URLs are automatically converted to raw content URLs for fetching.
 
-## Available Tools
+## Creating AGENTS.md
 
-| Tool                   | Description                                                   | Parameters                                                    |
-| ---------------------- | ------------------------------------------------------------- | ------------------------------------------------------------- |
-| `get_docs`             | Gets all AGENTS.md documentation content from configured URLs | None                                                          |
-| `get_doc_by_base_url`  | Gets AGENTS.md documentation from a specific base URL         | `baseUrl` (string): GitHub base URL (AGENTS.md will be added) |
-| `list_configured_urls` | Lists all configured base URLs                                | None                                                          |
+Create an `AGENTS.md` file in your repository with coding guidelines, patterns, and context. Example:
 
-## Example Usage
+```markdown
+# Agent Guidelines for MyProject
 
-Once configured, you can use the following tools in your AI assistant:
+## Architecture
 
-1. **Get all docs**: Use `get_docs` to fetch AGENTS.md content from all configured repository URLs
-2. **Get specific doc**: Use `get_doc_by_base_url` with a GitHub repository URL to fetch AGENTS.md from a specific location
-3. **List URLs**: Use `list_configured_urls` to see what repository URLs are currently configured
+- We use a microservices architecture
+- API Gateway pattern for routing
+- Event-driven communication between services
 
-## Running the Project Locally
+## Coding Standards
+
+- TypeScript with strict mode enabled
+- ESLint configuration in .eslintrc.json
+- Jest for testing with >80% coverage requirement
+
+## API Patterns
+
+- All endpoints use RESTful conventions
+- Authentication via JWT tokens
+- Rate limiting: 100 requests per minute
+
+## Common Tasks
+
+### Adding a New API Endpoint
+
+1. Create route in `src/routes/`
+2. Add controller in `src/controllers/`
+3. Write tests in `__tests__/`
+4. Update OpenAPI spec
+
+### Database Migrations
+
+Use `npm run migrate` to run migrations...
+```
+
+## Example Agent Interactions
+
+With this MCP server configured, agents can:
+
+**Automatic Context:**
+
+```
+Agent: "I need to implement a new API endpoint for user profiles"
+[Agent automatically reads documentation]
+Agent: "Based on the guidelines, I'll create the route in src/routes/,
+       add a controller, write tests, and update the OpenAPI spec..."
+```
+
+**Searching for Patterns:**
+
+```
+You: "Add authentication to the new endpoint"
+Agent: [Searches docs for "authentication"]
+Agent: "I found the JWT authentication pattern. I'll use the existing
+       middleware from src/middleware/auth.ts..."
+```
+
+## Running Locally
 
 The MCP server is built using the official TypeScript MCP SDK and follows the existing project structure and patterns.
 
